@@ -1,6 +1,6 @@
 {
   "name": "@zhigang1992/happy-cli",
-  "version": "0.12.1",
+  "version": "0.12.3",
   "description": "Mobile and Web client for Claude Code and Codex",
   "author": "Kirill Dubovitskiy",
   "license": "MIT",
@@ -51,7 +51,6 @@
     "dist",
     "bin",
     "scripts",
-    "tools",
     "package.json"
   ],
   "scripts": {
@@ -64,8 +63,7 @@
     "dev:local-server": "yarn build && tsx --env-file .env.dev-local-server src/index.ts",
     "dev:integration-test-env": "yarn build && tsx --env-file .env.integration-test src/index.ts",
     "prepublishOnly": "yarn build && yarn test",
-    "release": "release-it",
-    "postinstall": "node scripts/unpack-tools.cjs"
+    "release": "release-it"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.0.55",
