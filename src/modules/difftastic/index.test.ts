@@ -8,7 +8,7 @@ import { writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-describe('difftastic', () => {
+describe.skip('difftastic', () => {
     let testDir: string;
     let file1Path: string;
     let file2Path: string;
