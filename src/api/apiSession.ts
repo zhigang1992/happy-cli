@@ -2,7 +2,7 @@ import { logger } from '@/ui/logger'
 import { EventEmitter } from 'node:events'
 import { io, Socket } from 'socket.io-client'
 import { AgentState, ClientToServerEvents, ImageRefContent, MessageContent, Metadata, ServerToClientEvents, Session, Update, UserMessage, UserMessageSchema, Usage } from './types'
-import { decodeBase64, decrypt, decryptBlobWithDataKey, encodeBase64, encrypt } from './encryption';
+import { decodeBase64, decrypt, decryptBlob, encodeBase64, encrypt } from './encryption';
 import { backoff } from '@/utils/time';
 import { configuration } from '@/configuration';
 import { RawJSONLines } from '@/claude/types';
@@ -412,14 +412,9 @@ export class ApiSessionClient extends EventEmitter {
             const mimeType = response.headers['x-blob-mimetype'] as string;
             const originalSize = parseInt(response.headers['x-blob-size'] as string, 10);
 
-            // Decrypt the blob using the session's data encryption key
-            // Note: Only dataKey variant supports blob encryption
-            if (this.encryptionVariant !== 'dataKey') {
-                logger.debug('[API] Cannot decrypt blob: session uses legacy encryption');
-                return null;
-            }
-
-            const decryptedData = decryptBlobWithDataKey(encryptedData, this.encryptionKey);
+            // Decrypt the blob using the session's encryption key
+            // Supports both legacy (secretbox) and dataKey (AES-GCM) encryption variants
+            const decryptedData = decryptBlob(this.encryptionKey, this.encryptionVariant, encryptedData);
             if (!decryptedData) {
                 logger.debug('[API] Failed to decrypt blob');
                 return null;

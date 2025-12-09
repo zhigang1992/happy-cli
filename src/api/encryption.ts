@@ -252,6 +252,30 @@ export function decryptBlobWithDataKey(bundle: Uint8Array, dataKey: Uint8Array):
 }
 
 /**
+ * Decrypt binary blob data using TweetNaCl secretbox (legacy encryption)
+ * This is used for sessions with legacy encryption that use secretbox for blobs
+ * Bundle format: version(1) + nonce(24) + ciphertext
+ * @param bundle - The encrypted data bundle
+ * @param secret - The 32-byte secret key
+ * @returns The decrypted binary data or null if decryption fails
+ */
+export function decryptBlobWithSecretBox(bundle: Uint8Array, secret: Uint8Array): Uint8Array | null {
+  // Minimum: version(1) + nonce(24) + at least some ciphertext
+  if (bundle.length < 1 + tweetnacl.secretbox.nonceLength) {
+    return null;
+  }
+  if (bundle[0] !== 0) { // Only version 0
+    return null;
+  }
+
+  const nonce = bundle.slice(1, 1 + tweetnacl.secretbox.nonceLength);
+  const ciphertext = bundle.slice(1 + tweetnacl.secretbox.nonceLength);
+
+  const decrypted = tweetnacl.secretbox.open(ciphertext, nonce, secret);
+  return decrypted || null;
+}
+
+/**
  * Encrypt binary blob data using AES-256-GCM with the data encryption key
  * Unlike encryptWithDataKey, this encrypts raw bytes without JSON serialization
  * @param data - The binary data to encrypt
@@ -292,6 +316,21 @@ export function decrypt(key: Uint8Array, variant: 'legacy' | 'dataKey', data: Ui
     return decryptLegacy(data, key);
   } else {
     return decryptWithDataKey(data, key);
+  }
+}
+
+/**
+ * Decrypt binary blob data using the appropriate method based on encryption variant
+ * @param key - The encryption key
+ * @param variant - The encryption variant ('legacy' for secretbox, 'dataKey' for AES-GCM)
+ * @param bundle - The encrypted data bundle
+ * @returns The decrypted binary data or null if decryption fails
+ */
+export function decryptBlob(key: Uint8Array, variant: 'legacy' | 'dataKey', bundle: Uint8Array): Uint8Array | null {
+  if (variant === 'legacy') {
+    return decryptBlobWithSecretBox(bundle, key);
+  } else {
+    return decryptBlobWithDataKey(bundle, key);
   }
 }
 
