@@ -1,8 +1,8 @@
 import { logger } from '@/ui/logger'
 import { EventEmitter } from 'node:events'
 import { io, Socket } from 'socket.io-client'
-import { AgentState, ClientToServerEvents, MessageContent, Metadata, ServerToClientEvents, Session, Update, UserMessage, UserMessageSchema, Usage } from './types'
-import { decodeBase64, decrypt, encodeBase64, encrypt } from './encryption';
+import { AgentState, ClientToServerEvents, ImageRefContent, MessageContent, Metadata, ServerToClientEvents, Session, Update, UserMessage, UserMessageSchema, Usage } from './types'
+import { decodeBase64, decrypt, decryptBlobWithDataKey, encodeBase64, encrypt } from './encryption';
 import { backoff } from '@/utils/time';
 import { configuration } from '@/configuration';
 import { RawJSONLines } from '@/claude/types';
@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { AsyncLock } from '@/utils/lock';
 import { RpcHandlerManager } from './rpc/RpcHandlerManager';
 import { registerCommonHandlers } from '../modules/common/registerCommonHandlers';
+import axios from 'axios';
 
 export class ApiSessionClient extends EventEmitter {
     private readonly token: string;
@@ -388,5 +389,79 @@ export class ApiSessionClient extends EventEmitter {
     async close() {
         logger.debug('[API] socket.close() called');
         this.socket.close();
+    }
+
+    /**
+     * Download and decrypt a blob from the server
+     * @param blobId - The blob ID to download
+     * @returns The decrypted binary data and metadata, or null if download/decryption fails
+     */
+    async downloadBlob(blobId: string): Promise<{ data: Uint8Array; mimeType: string; size: number } | null> {
+        try {
+            const response = await axios.get(
+                `${configuration.serverUrl}/v1/sessions/${this.sessionId}/blobs/${blobId}`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${this.token}`
+                    },
+                    responseType: 'arraybuffer'
+                }
+            );
+
+            const encryptedData = new Uint8Array(response.data);
+            const mimeType = response.headers['x-blob-mimetype'] as string;
+            const originalSize = parseInt(response.headers['x-blob-size'] as string, 10);
+
+            // Decrypt the blob using the session's data encryption key
+            // Note: Only dataKey variant supports blob encryption
+            if (this.encryptionVariant !== 'dataKey') {
+                logger.debug('[API] Cannot decrypt blob: session uses legacy encryption');
+                return null;
+            }
+
+            const decryptedData = decryptBlobWithDataKey(encryptedData, this.encryptionKey);
+            if (!decryptedData) {
+                logger.debug('[API] Failed to decrypt blob');
+                return null;
+            }
+
+            return {
+                data: decryptedData,
+                mimeType,
+                size: originalSize
+            };
+        } catch (error) {
+            logger.debug('[API] Failed to download blob:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Convert an image_ref content block to a Claude API image content block
+     * Downloads, decrypts, and base64 encodes the image
+     * @param imageRef - The image reference content block
+     * @returns Claude API image content block, or null if conversion fails
+     */
+    async resolveImageRef(imageRef: ImageRefContent): Promise<{
+        type: 'image';
+        source: {
+            type: 'base64';
+            media_type: string;
+            data: string;
+        };
+    } | null> {
+        const blob = await this.downloadBlob(imageRef.blobId);
+        if (!blob) {
+            return null;
+        }
+
+        return {
+            type: 'image',
+            source: {
+                type: 'base64',
+                media_type: blob.mimeType,
+                data: Buffer.from(blob.data).toString('base64')
+            }
+        };
     }
 }

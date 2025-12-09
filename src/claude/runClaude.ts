@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { ApiClient } from '@/api/api';
 import { logger } from '@/ui/logger';
 import { loop } from '@/claude/loop';
-import { AgentState, Metadata } from '@/api/types';
+import { AgentState, ContentBlock, ImageRefContent, Metadata, TextContent, UserMessage, UserMessageContent } from '@/api/types';
 // @ts-ignore
 import packageJson from '../../package.json';
 import { Credentials, readSettings } from '@/persistence';
@@ -22,6 +22,46 @@ import { startHappyServer } from '@/claude/utils/startHappyServer';
 import { registerKillSessionHandler } from './registerKillSessionHandler';
 import { projectPath } from '../projectPath';
 import { resolve } from 'node:path';
+
+/**
+ * Extract text content from a user message that may contain text or mixed content
+ */
+function extractTextFromContent(content: UserMessageContent): string {
+    // Legacy: single text content object
+    if (!Array.isArray(content)) {
+        if (content.type === 'text') {
+            return content.text;
+        }
+        return '';
+    }
+
+    // New: array of content blocks - extract all text blocks
+    const textParts: string[] = [];
+    for (const block of content) {
+        if (block.type === 'text') {
+            textParts.push((block as TextContent).text);
+        }
+        // image_ref blocks are handled separately
+    }
+    return textParts.join('\n');
+}
+
+/**
+ * Extract image references from content
+ */
+function extractImageRefs(content: UserMessageContent): ImageRefContent[] {
+    if (!Array.isArray(content)) {
+        return [];
+    }
+    return content.filter((block): block is ImageRefContent => block.type === 'image_ref');
+}
+
+/**
+ * Check if content has any image references
+ */
+function hasImageRefs(content: UserMessageContent): boolean {
+    return extractImageRefs(content).length > 0;
+}
 
 export interface StartOptions {
     model?: string
@@ -251,8 +291,17 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             logger.debug(`[loop] User message received with no disallowed tools override, using current: ${currentDisallowedTools ? currentDisallowedTools.join(', ') : 'none'}`);
         }
 
+        // Extract text content from message (handles both legacy and array formats)
+        const textContent = extractTextFromContent(message.content);
+        const imageRefs = extractImageRefs(message.content);
+
+        // Log if message contains images
+        if (imageRefs.length > 0) {
+            logger.debug(`[loop] User message contains ${imageRefs.length} image(s)`);
+        }
+
         // Check for special commands before processing
-        const specialCommand = parseSpecialCommand(message.content.text);
+        const specialCommand = parseSpecialCommand(textContent);
 
         if (specialCommand.type === 'compact') {
             logger.debug('[start] Detected /compact command');
@@ -263,9 +312,10 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
                 customSystemPrompt: messageCustomSystemPrompt,
                 appendSystemPrompt: messageAppendSystemPrompt,
                 allowedTools: messageAllowedTools,
-                disallowedTools: messageDisallowedTools
+                disallowedTools: messageDisallowedTools,
+                imageRefs: imageRefs.length > 0 ? imageRefs : undefined
             };
-            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || message.content.text, enhancedMode);
+            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || textContent, enhancedMode);
             logger.debugLargeJson('[start] /compact command pushed to queue:', message);
             return;
         }
@@ -279,14 +329,15 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
                 customSystemPrompt: messageCustomSystemPrompt,
                 appendSystemPrompt: messageAppendSystemPrompt,
                 allowedTools: messageAllowedTools,
-                disallowedTools: messageDisallowedTools
+                disallowedTools: messageDisallowedTools,
+                imageRefs: imageRefs.length > 0 ? imageRefs : undefined
             };
-            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || message.content.text, enhancedMode);
+            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || textContent, enhancedMode);
             logger.debugLargeJson('[start] /compact command pushed to queue:', message);
             return;
         }
 
-        // Push with resolved permission mode, model, system prompts, and tools
+        // Push with resolved permission mode, model, system prompts, tools, and image refs
         const enhancedMode: EnhancedMode = {
             permissionMode: messagePermissionMode || 'default',
             model: messageModel,
@@ -294,9 +345,10 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             customSystemPrompt: messageCustomSystemPrompt,
             appendSystemPrompt: messageAppendSystemPrompt,
             allowedTools: messageAllowedTools,
-            disallowedTools: messageDisallowedTools
+            disallowedTools: messageDisallowedTools,
+            imageRefs: imageRefs.length > 0 ? imageRefs : undefined
         };
-        messageQueue.push(message.content.text, enhancedMode);
+        messageQueue.push(textContent, enhancedMode);
         logger.debugLargeJson('User message pushed to queue:', message)
     });
 

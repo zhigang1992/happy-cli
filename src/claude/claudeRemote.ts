@@ -11,6 +11,17 @@ import { awaitFileExist } from "@/modules/watcher/awaitFileExist";
 import { systemPrompt } from "./utils/systemPrompt";
 import { PermissionResult } from "./sdk/types";
 import { loadDirenvEnvironment } from "@/utils/direnv";
+import { ImageRefContent } from "@/api/types";
+
+/** Resolved image in Claude API format */
+export interface ResolvedImage {
+    type: 'image';
+    source: {
+        type: 'base64';
+        media_type: string;
+        data: string;
+    };
+}
 
 export async function claudeRemote(opts: {
 
@@ -23,6 +34,9 @@ export async function claudeRemote(opts: {
     allowedTools: string[],
     signal?: AbortSignal,
     canCallTool: (toolName: string, input: unknown, mode: EnhancedMode, options: { signal: AbortSignal }) => Promise<PermissionResult>,
+
+    // Image resolution callback
+    resolveImageRefs?: (imageRefs: ImageRefContent[]) => Promise<ResolvedImage[]>,
 
     // Dynamic parameters
     nextMessage: () => Promise<{ message: string, mode: EnhancedMode } | null>,
@@ -217,13 +231,47 @@ export async function claudeRemote(opts: {
         }
     };
 
+    // Helper to build message content with images
+    async function buildMessageContent(text: string, imageRefs?: ImageRefContent[]): Promise<string | Array<{ type: string; [key: string]: unknown }>> {
+        // If no images, return simple string
+        if (!imageRefs || imageRefs.length === 0 || !opts.resolveImageRefs) {
+            return text;
+        }
+
+        // Resolve images and build content array
+        logger.debug(`[claudeRemote] Resolving ${imageRefs.length} image references`);
+        const resolvedImages = await opts.resolveImageRefs(imageRefs);
+        logger.debug(`[claudeRemote] Resolved ${resolvedImages.length} images`);
+
+        if (resolvedImages.length === 0) {
+            // No images resolved, return simple text
+            return text;
+        }
+
+        // Build content array: images first, then text
+        const content: Array<{ type: string; [key: string]: unknown }> = [];
+
+        // Add resolved images (double cast to satisfy index signature)
+        for (const img of resolvedImages) {
+            content.push(img as unknown as { type: string; [key: string]: unknown });
+        }
+
+        // Add text content
+        if (text) {
+            content.push({ type: 'text', text });
+        }
+
+        return content;
+    }
+
     // Push initial message
     let messages = new PushableAsyncIterable<SDKUserMessage>();
+    const initialContent = await buildMessageContent(initial.message, initial.mode.imageRefs);
     messages.push({
         type: 'user',
         message: {
             role: 'user',
-            content: initial.message,
+            content: initialContent,
         },
     });
 
@@ -285,7 +333,8 @@ export async function claudeRemote(opts: {
                     return;
                 }
                 mode = next.mode;
-                messages.push({ type: 'user', message: { role: 'user', content: next.message } });
+                const nextContent = await buildMessageContent(next.message, next.mode.imageRefs);
+                messages.push({ type: 'user', message: { role: 'user', content: nextContent } });
             }
 
             // Handle tool result

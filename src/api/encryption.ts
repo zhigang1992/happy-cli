@@ -213,6 +213,72 @@ export function decryptWithDataKey(bundle: Uint8Array, dataKey: Uint8Array): any
   }
 }
 
+/**
+ * Decrypt binary blob data using AES-256-GCM with the data encryption key
+ * Unlike decryptWithDataKey, this returns raw bytes without JSON parsing
+ * @param bundle - The encrypted data bundle
+ * @param dataKey - The 32-byte AES-256 key
+ * @returns The decrypted binary data or null if decryption fails
+ */
+export function decryptBlobWithDataKey(bundle: Uint8Array, dataKey: Uint8Array): Uint8Array | null {
+  if (bundle.length < 1) {
+    return null;
+  }
+  if (bundle[0] !== 0) { // Only version 0
+    return null;
+  }
+  if (bundle.length < 12 + 16 + 1) { // Minimum: version + nonce + auth tag
+    return null;
+  }
+
+  const nonce = bundle.slice(1, 13);
+  const authTag = bundle.slice(bundle.length - 16);
+  const ciphertext = bundle.slice(13, bundle.length - 16);
+
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', dataKey, nonce);
+    decipher.setAuthTag(authTag);
+
+    const decrypted = Buffer.concat([
+      decipher.update(ciphertext),
+      decipher.final()
+    ]);
+
+    return new Uint8Array(decrypted);
+  } catch (error) {
+    // Decryption failed
+    return null;
+  }
+}
+
+/**
+ * Encrypt binary blob data using AES-256-GCM with the data encryption key
+ * Unlike encryptWithDataKey, this encrypts raw bytes without JSON serialization
+ * @param data - The binary data to encrypt
+ * @param dataKey - The 32-byte AES-256 key
+ * @returns The encrypted data bundle (version + nonce + ciphertext + auth tag)
+ */
+export function encryptBlobWithDataKey(data: Uint8Array, dataKey: Uint8Array): Uint8Array {
+  const nonce = getRandomBytes(12); // GCM uses 12-byte nonces
+  const cipher = createCipheriv('aes-256-gcm', dataKey, nonce);
+
+  const encrypted = Buffer.concat([
+    cipher.update(data),
+    cipher.final()
+  ]);
+
+  const authTag = cipher.getAuthTag();
+
+  // Bundle: version(1) + nonce (12) + ciphertext + auth tag (16)
+  const bundle = new Uint8Array(1 + 12 + encrypted.length + 16);
+  bundle.set([0], 0); // version 0
+  bundle.set(nonce, 1);
+  bundle.set(new Uint8Array(encrypted), 13);
+  bundle.set(new Uint8Array(authTag), 13 + encrypted.length);
+
+  return bundle;
+}
+
 export function encrypt(key: Uint8Array, variant: 'legacy' | 'dataKey', data: any): Uint8Array {
   if (variant === 'legacy') {
     return encryptLegacy(data, key);

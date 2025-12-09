@@ -15,6 +15,7 @@ import { EnhancedMode } from "./loop";
 import { RawJSONLines } from "@/claude/types";
 import { OutgoingMessageQueue } from "./utils/OutgoingMessageQueue";
 import { getToolName } from "./utils/getToolName";
+import { ImageRefContent } from "@/api/types";
 
 interface PermissionsField {
     date: number;
@@ -334,6 +335,28 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     canCallTool: permissionHandler.handleToolCall,
                     isAborted: (toolCallId: string) => {
                         return permissionHandler.isAborted(toolCallId);
+                    },
+                    resolveImageRefs: async (imageRefs: ImageRefContent[]) => {
+                        // Resolve image references to Claude API format
+                        const resolved: Array<{
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            };
+                        }> = [];
+
+                        for (const imageRef of imageRefs) {
+                            const image = await session.client.resolveImageRef(imageRef);
+                            if (image) {
+                                resolved.push(image);
+                            } else {
+                                logger.debug(`[remote]: Failed to resolve image ref: ${imageRef.blobId}`);
+                            }
+                        }
+
+                        return resolved;
                     },
                     nextMessage: async () => {
                         if (pending) {

@@ -8,7 +8,7 @@ import { DiffProcessor } from './utils/diffProcessor';
 import { randomUUID } from 'node:crypto';
 import { logger } from '@/ui/logger';
 import { Credentials, readSettings } from '@/persistence';
-import { AgentState, Metadata } from '@/api/types';
+import { AgentState, Metadata, TextContent, UserMessageContent } from '@/api/types';
 import { initialMachineMetadata } from '@/daemon/run';
 import { configuration } from '@/configuration';
 import packageJson from '../../package.json';
@@ -35,6 +35,30 @@ type ReadyEventOptions = {
     sendReady: () => void;
     notify?: () => void;
 };
+
+/**
+ * Extract text content from a user message that may contain text or mixed content
+ * (Codex doesn't support images, so we just extract text)
+ */
+function extractTextFromContent(content: UserMessageContent): string {
+    // Legacy: single text content object
+    if (!Array.isArray(content)) {
+        if (content.type === 'text') {
+            return content.text;
+        }
+        return '';
+    }
+
+    // New: array of content blocks - extract all text blocks
+    const textParts: string[] = [];
+    for (const block of content) {
+        if (block.type === 'text') {
+            textParts.push((block as TextContent).text);
+        }
+        // image_ref blocks are ignored in Codex
+    }
+    return textParts.join('\n');
+}
 
 /**
  * Notify connected clients when Codex finishes processing and the queue is idle.
@@ -175,7 +199,8 @@ export async function runCodex(opts: {
             permissionMode: messagePermissionMode || 'default',
             model: messageModel,
         };
-        messageQueue.push(message.content.text, enhancedMode);
+        const textContent = extractTextFromContent(message.content);
+        messageQueue.push(textContent, enhancedMode);
     });
     let thinking = false;
     session.keepAlive(thinking, 'remote');

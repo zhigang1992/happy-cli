@@ -6,6 +6,7 @@ import { claudeLocalLauncher } from "./claudeLocalLauncher"
 import { claudeRemoteLauncher } from "./claudeRemoteLauncher"
 import { ApiClient } from "@/lib"
 import { loadAndMergeEnvironment } from "@/utils/direnv"
+import { ImageRefContent } from "@/api/types"
 
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
 
@@ -17,6 +18,7 @@ export interface EnhancedMode {
     appendSystemPrompt?: string;
     allowedTools?: string[];
     disallowedTools?: string[];
+    imageRefs?: ImageRefContent[];
 }
 
 interface LoopOptions {

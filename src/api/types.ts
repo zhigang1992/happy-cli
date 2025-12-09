@@ -259,12 +259,49 @@ export const CreateSessionResponseSchema = z.object({
 
 export type CreateSessionResponse = z.infer<typeof CreateSessionResponseSchema>
 
+/**
+ * Text content block for user messages
+ */
+export const TextContentSchema = z.object({
+  type: z.literal('text'),
+  text: z.string()
+})
+
+export type TextContent = z.infer<typeof TextContentSchema>
+
+/**
+ * Image reference content block for user messages (E2E encrypted images)
+ */
+export const ImageRefContentSchema = z.object({
+  type: z.literal('image_ref'),
+  blobId: z.string(),
+  mimeType: z.enum(['image/jpeg', 'image/png', 'image/gif', 'image/webp']),
+  width: z.number().optional(),
+  height: z.number().optional()
+})
+
+export type ImageRefContent = z.infer<typeof ImageRefContentSchema>
+
+/**
+ * Union of all content block types
+ */
+export const ContentBlockSchema = z.union([TextContentSchema, ImageRefContentSchema])
+
+export type ContentBlock = z.infer<typeof ContentBlockSchema>
+
+/**
+ * User message content can be either a single text block (legacy) or an array of content blocks
+ */
+export const UserMessageContentSchema = z.union([
+  TextContentSchema, // Legacy: single text content
+  z.array(ContentBlockSchema) // New: array of content blocks
+])
+
+export type UserMessageContent = z.infer<typeof UserMessageContentSchema>
+
 export const UserMessageSchema = z.object({
   role: z.literal('user'),
-  content: z.object({
-    type: z.literal('text'),
-    text: z.string()
-  }),
+  content: UserMessageContentSchema,
   localKey: z.string().optional(), // Mobile messages include this
   meta: MessageMetaSchema.optional()
 })
