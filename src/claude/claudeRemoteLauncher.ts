@@ -15,6 +15,7 @@ import { EnhancedMode } from "./loop";
 import { RawJSONLines } from "@/claude/types";
 import { OutgoingMessageQueue } from "./utils/OutgoingMessageQueue";
 import { getToolName } from "./utils/getToolName";
+import { basename } from "path";
 
 interface PermissionsField {
     date: number;
@@ -384,9 +385,10 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     onReady: () => {
                         if (!pending && session.queue.size() === 0) {
                             session.client.sendSessionEvent({ type: 'ready' });
+                            const folderName = basename(session.path);
                             session.api.push().sendToAllDevices(
-                                'It\'s ready!',
-                                `Claude is waiting for your command`,
+                                `Ready`,
+                                folderName,
                                 { sessionId: session.client.sessionId }
                             );
                         }
