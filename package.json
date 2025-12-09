@@ -1,6 +1,6 @@
 {
   "name": "@zhigang1992/happy-cli",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "Mobile and Web client for Claude Code and Codex",
   "author": "Kirill Dubovitskiy",
   "license": "MIT",
