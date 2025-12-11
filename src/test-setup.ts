@@ -12,7 +12,7 @@ export function setup() {
 
   // Make sure to build the project before running tests
   // We rely on the dist files to spawn our CLI in integration tests
-  const buildResult = spawnSync('yarn', ['build'], { stdio: 'pipe' })
+  const buildResult = spawnSync('bun', ['run', 'build'], { stdio: 'pipe' })
 
   if (buildResult.stderr && buildResult.stderr.length > 0) {
     const errorOutput = buildResult.stderr.toString()

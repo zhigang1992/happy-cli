@@ -4,9 +4,9 @@
  * Tests the full flow of daemon startup, session tracking, and shutdown
  * 
  * IMPORTANT: These tests MUST be run with the integration test environment:
- * yarn test:integration-test-env
- * 
- * DO NOT run with regular 'npm test' or 'yarn test' - it will use the wrong environment
+ * bun test:integration-test-env
+ *
+ * DO NOT run with regular 'npm test' or 'bun test' - it will use the wrong environment
  * and the daemon will not work properly!
  * 
  * The integration test environment uses .env.integration-test which sets:
@@ -252,7 +252,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
   it('should not allow starting a second daemon', async () => {
     // Daemon is already running from beforeEach
     // Try to start another daemon
-    const secondChild = spawn('yarn', ['tsx', 'src/index.ts', 'daemon', 'start-sync'], {
+    const secondChild = spawn('bun', ['tsx', 'src/index.ts', 'daemon', 'start-sync'], {
       cwd: process.cwd(),
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe']
@@ -386,7 +386,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
    * 
    * 1. Test starts daemon with original version (e.g., 0.9.0-6) compiled into dist/
    * 2. Test modifies package.json to new version (e.g., 0.0.0-integration-test-*)
-   * 3. Test runs `yarn build` to recompile with new version
+   * 3. Test runs `bun run build` to recompile with new version
    * 4. Daemon's heartbeat (every 30s) reads package.json and compares to its compiled version
    * 5. Daemon detects mismatch: package.json != configuration.currentCliVersion
    * 6. Daemon spawns new daemon via spawnHappyCLI(['daemon', 'start'])
@@ -402,9 +402,9 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
    *   our test must carefully rebuild to avoid missing entrypoint errors
    * 
    * Critical timing constraints:
-   * - Heartbeat must be long enough (30s) for yarn build to complete before daemon tries to spawn
+   * - Heartbeat must be long enough (30s) for bun run build to complete before daemon tries to spawn
    * - If heartbeat fires during rebuild, spawn fails (dist/index.mjs missing) and test fails
-   * - pkgroll doesn't reliably update compiled version, must use full yarn build
+   * - pkgroll doesn't reliably update compiled version, must use full bun run build
    * - Test modifies package.json BEFORE rebuild to ensure new version is compiled in
    * 
    * Common failure modes:
@@ -435,11 +435,11 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
 
       // Re-build the CLI - so it will import the new package.json in its configuartion.ts
       // and think it is a new version
-      // We are not using yarn build here because it cleans out dist/
-      // and we want to avoid that, 
+      // We are not using bun run build here because it cleans out dist/
+      // and we want to avoid that,
       // otherwise daemon will spawn a non existing happy js script.
       // We need to remove index, but not the other files, otherwise some of our code might fail when called from within the daemon.
-      execSync('yarn build', { stdio: 'ignore' });
+      execSync('bun run build', { stdio: 'ignore' });
       
       console.log(`[TEST] Current daemon running with version ${originalVersion}, PID: ${initialPid}`);
       
@@ -461,7 +461,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
       console.log(`[TEST] Restored package.json version to ${originalVersion}`);
 
       // Lets rebuild it so we keep it as we found it
-      execSync('yarn build', { stdio: 'ignore' });
+      execSync('bun run build', { stdio: 'ignore' });
     }
   });
 
