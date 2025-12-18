@@ -37,7 +37,7 @@ export async function startHappyServer(client: ApiSessionClient) {
     const mcp = new McpServer({
         name: "Happy MCP",
         version: "1.0.0",
-        description: "Happy CLI MCP server with chat session management tools",
+        title: "Happy CLI MCP Server",
     });
 
     mcp.registerTool('change_title', {

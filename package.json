@@ -1,6 +1,6 @@
 {
   "name": "@zhigang1992/happy-cli",
-  "version": "0.12.5",
+  "version": "0.12.6",
   "description": "Mobile and Web client for Claude Code and Codex",
   "author": "Kirill Dubovitskiy",
   "license": "MIT",
@@ -69,6 +69,7 @@
     "@anthropic-ai/claude-code": "2.0.55",
     "@anthropic-ai/sdk": "0.65.0",
     "@elevenlabs/elevenlabs-js": "^2.25.1",
+    "@iarna/toml": "^3.0.0",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "@stablelib/base64": "^2.0.1",
     "@stablelib/hex": "^2.0.1",

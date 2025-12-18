@@ -27,6 +27,7 @@ import { notifyDaemonSessionStarted } from "@/daemon/controlClient";
 import { registerKillSessionHandler } from "@/claude/registerKillSessionHandler";
 import { delay } from "@/utils/time";
 import { stopCaffeinate } from "@/utils/caffeinate";
+import { parse as parseToml } from '@iarna/toml';
 
 type ReadyEventOptions = {
     pending: unknown;
@@ -34,6 +35,15 @@ type ReadyEventOptions = {
     shouldExit: boolean;
     sendReady: () => void;
     notify?: () => void;
+};
+
+type CodexMcpServerConfig = {
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+    transport?: string;
+    hidden?: boolean;
+    [key: string]: unknown;
 };
 
 /**
@@ -558,6 +568,33 @@ export async function runCodex(opts: {
         }
     });
 
+    // Read existing Codex MCP servers from ~/.codex/config.toml
+    let existingMcpServers: Record<string, CodexMcpServerConfig> = {};
+    try {
+        const codexConfigPath = join(os.homedir(), '.codex', 'config.toml');
+        if (fs.existsSync(codexConfigPath)) {
+            const configContents = fs.readFileSync(codexConfigPath, 'utf8');
+            const parsedConfig = parseToml(configContents) as { mcp_servers?: Record<string, unknown> };
+            const parsedServers = parsedConfig?.mcp_servers;
+            if (parsedServers && typeof parsedServers === 'object') {
+                for (const [name, rawConfig] of Object.entries(parsedServers)) {
+                    if (!rawConfig || typeof rawConfig !== 'object') {
+                        continue;
+                    }
+                    const command = (rawConfig as { command?: unknown }).command;
+                    if (typeof command !== 'string') {
+                        logger.debug(`[codex] Skipping MCP server "${name}" because command is missing`);
+                        continue;
+                    }
+                    existingMcpServers[name] = rawConfig as CodexMcpServerConfig;
+                }
+            }
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.debug(`[codex] Error reading Codex config: ${message}`);
+    }
+
     // Start Happy MCP server (HTTP) and prepare STDIO bridge config for Codex
     const happyServer = await startHappyServer(session);
     const bridgeCommand = join(projectPath(), 'bin', 'happy-mcp.mjs');
@@ -565,7 +602,8 @@ export async function runCodex(opts: {
         happy: {
             command: bridgeCommand,
             args: ['--url', happyServer.url]
-        }
+        },
+        ...existingMcpServers
     } as const;
     let first = true;
 
