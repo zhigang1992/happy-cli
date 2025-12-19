@@ -41,8 +41,8 @@ This will:
 
 ## Environment Variables
 
-- `HAPPY_SERVER_URL` - Custom server URL (default: https://api.cluster-fluster.com)
-- `HAPPY_WEBAPP_URL` - Custom web app URL (default: https://app.happy.engineering)
+- `HAPPY_SERVER_URL` - Custom server URL (default: https://happy-server.reily.app)
+- `HAPPY_WEBAPP_URL` - Custom web app URL (default: https://happy.reily.app)
 - `HAPPY_HOME_DIR` - Custom home directory for Happy data (default: ~/.happy)
 - `HAPPY_DISABLE_CAFFEINATE` - Disable macOS sleep prevention (set to `true`, `1`, or `yes`)
 - `HAPPY_EXPERIMENTAL` - Enable experimental features (set to `true`, `1`, or `yes`)
