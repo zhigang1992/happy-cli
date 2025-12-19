@@ -1,3 +1,21 @@
+# Happy CLI (Fork)
+
+> **This is a personal fork of [happy-cli](https://github.com/slopus/happy-cli) from the amazing [Happy](https://happy.engineering) project.**
+>
+> All credit goes to the original authors. I've made some tweaks for my own self-hosted setup, but my changes are too scattered and experimental to submit upstream. If you're looking for the official version, please visit [github.com/slopus/happy-cli](https://github.com/slopus/happy-cli).
+
+## Fork Changes
+
+- Renamed package to `@zhigang1992/happy-cli` for personal npm publishing
+- Changed default server URLs to `happy-server.reily.app` and `happy.reily.app`
+- Switched from yarn to bun
+- Lazy download of tools to reduce package size (~110MB to ~186KB)
+- Added image attachment support in messages
+- Improved push notifications with folder name
+- Various bug fixes and improvements
+
+---
+
 # Happy
 
 Code on the go controlling claude code from your mobile device.
