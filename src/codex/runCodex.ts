@@ -222,8 +222,10 @@ export async function runCodex(opts: {
     const sendReady = () => {
         session.sendSessionEvent({ type: 'ready' });
         try {
+            const hostname = os.hostname();
+            const notificationTitle = `(${hostname}) ${process.cwd()}`;
             api.push().sendToAllDevices(
-                "It's ready!",
+                notificationTitle,
                 'Codex is waiting for your command',
                 { sessionId: session.sessionId }
             );
