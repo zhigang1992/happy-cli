@@ -409,12 +409,12 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     onReady: () => {
                         if (!pending && session.queue.size() === 0) {
                             session.client.sendSessionEvent({ type: 'ready' });
-                            const folderName = basename(session.path);
                             const hostname = os.hostname();
                             const notificationTitle = `(${hostname}) ${session.path}`;
+                            const sessionName = session.client.getSummary() || basename(session.path);
                             session.api.push().sendToAllDevices(
                                 notificationTitle,
-                                folderName,
+                                sessionName,
                                 { sessionId: session.client.sessionId }
                             );
                         }

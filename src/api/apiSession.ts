@@ -317,6 +317,14 @@ export class ApiSessionClient extends EventEmitter {
     }
 
     /**
+     * Get the current session summary/title
+     * @returns The summary text or undefined if not set
+     */
+    getSummary(): string | undefined {
+        return this.metadata?.summary?.text;
+    }
+
+    /**
      * Update session metadata
      * @param handler - Handler function that returns the updated metadata
      */
