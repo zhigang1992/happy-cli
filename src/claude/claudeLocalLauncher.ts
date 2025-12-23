@@ -113,12 +113,21 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
                     break;
                 }
             } catch (e) {
+                const errorMessage = e instanceof Error ? e.message : String(e);
                 logger.debug('[local]: launch error', e);
-                if (!exitReason) {
-                    session.client.sendSessionEvent({ type: 'message', message: 'Process exited unexpectedly' });
-                    continue;
-                } else {
+
+                // Always send error details to the app
+                // Note: exitReason can be set by async callbacks (doAbort/doSwitch) during the await
+                const reason = exitReason as 'switch' | 'exit' | null;
+                if (reason === 'switch') {
+                    session.client.sendSessionEvent({ type: 'message', message: `Error during mode switch: ${errorMessage}` });
                     break;
+                } else if (reason === 'exit') {
+                    session.client.sendSessionEvent({ type: 'message', message: `Error during exit: ${errorMessage}` });
+                    break;
+                } else {
+                    session.client.sendSessionEvent({ type: 'message', message: `Process error: ${errorMessage}` });
+                    continue;
                 }
             }
             logger.debug('[local]: launch done');

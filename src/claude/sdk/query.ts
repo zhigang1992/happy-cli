@@ -273,7 +273,8 @@ export function query(config: {
             model,
             fallbackModel,
             strictMcpConfig,
-            canCallTool
+            canCallTool,
+            onStderr
         } = {}
     } = config
 
@@ -345,12 +346,16 @@ export function query(config: {
         childStdin = child.stdin
     }
 
-    // Handle stderr in debug mode
-    if (process.env.DEBUG) {
-        child.stderr.on('data', (data) => {
-            console.error('Claude Code stderr:', data.toString())
-        })
-    }
+    // Handle stderr - always capture for callback, also log in debug mode
+    child.stderr.on('data', (data) => {
+        const stderrText = data.toString()
+        if (process.env.DEBUG) {
+            console.error('Claude Code stderr:', stderrText)
+        }
+        if (onStderr) {
+            onStderr(stderrText)
+        }
+    })
 
     // Setup cleanup
     const cleanup = () => {

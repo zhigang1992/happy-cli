@@ -419,6 +419,14 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             );
                         }
                     },
+                    onStderr: (data: string) => {
+                        // Forward stderr messages to the app (e.g., rate limit warnings)
+                        const trimmed = data.trim();
+                        if (trimmed) {
+                            logger.debug(`[remote]: stderr: ${trimmed}`);
+                            session.client.sendSessionEvent({ type: 'message', message: trimmed });
+                        }
+                    },
                     signal: abortController.signal,
                 });
                 
@@ -429,9 +437,16 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     session.client.sendSessionEvent({ type: 'message', message: 'Aborted by user' });
                 }
             } catch (e) {
+                const errorMessage = e instanceof Error ? e.message : String(e);
                 logger.debug('[remote]: launch error', e);
-                if (!exitReason) {
-                    session.client.sendSessionEvent({ type: 'message', message: 'Process exited unexpectedly' });
+
+                // Always send error details to the app
+                if (exitReason === 'switch') {
+                    session.client.sendSessionEvent({ type: 'message', message: `Error during mode switch: ${errorMessage}` });
+                } else if (exitReason === 'exit') {
+                    session.client.sendSessionEvent({ type: 'message', message: `Error during exit: ${errorMessage}` });
+                } else {
+                    session.client.sendSessionEvent({ type: 'message', message: `Process error: ${errorMessage}` });
                     continue;
                 }
             } finally {

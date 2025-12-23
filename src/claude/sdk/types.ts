@@ -173,6 +173,7 @@ export interface QueryOptions {
     fallbackModel?: string
     strictMcpConfig?: boolean
     canCallTool?: CanCallToolCallback
+    onStderr?: (data: string) => void
 }
 
 /**

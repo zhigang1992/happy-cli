@@ -48,7 +48,8 @@ export async function claudeRemote(opts: {
     onThinkingChange?: (thinking: boolean) => void,
     onMessage: (message: SDKMessage) => void,
     onCompletionEvent?: (message: string) => void,
-    onSessionReset?: () => void
+    onSessionReset?: () => void,
+    onStderr?: (data: string) => void
 }) {
 
     // Check if session is valid
@@ -217,6 +218,7 @@ export async function claudeRemote(opts: {
         pathToClaudeCodeExecutable: (() => {
             return resolve(join(projectPath(), 'scripts', 'claude_remote_launcher.cjs'));
         })(),
+        onStderr: opts.onStderr,
     }
 
     // Track thinking state
