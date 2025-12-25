@@ -65,6 +65,12 @@ This will:
 - `HAPPY_DISABLE_CAFFEINATE` - Disable macOS sleep prevention (set to `true`, `1`, or `yes`)
 - `HAPPY_EXPERIMENTAL` - Enable experimental features (set to `true`, `1`, or `yes`)
 
+## Recommended MCP Servers
+
+These MCP servers work well with Happy:
+
+- **[@zhigang1992/uploadfile-mcp](https://github.com/zhigang1992/upload-mcp)** - Upload local files to get shareable public URLs. Useful for sharing generated images, CSVs, and other files from AI sessions.
+
 ## Requirements
 
 - Node.js >= 20.0.0
