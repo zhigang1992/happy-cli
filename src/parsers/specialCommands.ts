@@ -16,10 +16,16 @@ export interface HappyStatusCommandResult {
     echoMessage?: string;
 }
 
+export interface DirectCommandResult {
+    isDirectCommand: boolean;
+    command?: string;
+}
+
 export interface SpecialCommandResult {
-    type: 'compact' | 'clear' | 'happy-status' | null;
+    type: 'compact' | 'clear' | 'happy-status' | 'direct-command' | null;
     originalMessage?: string;
     echoMessage?: string;
+    command?: string;
 }
 
 /**
@@ -88,6 +94,29 @@ export function parseHappyStatus(message: string): HappyStatusCommandResult {
 }
 
 /**
+ * Parse !command for direct shell command execution
+ * Matches messages starting with "!" followed by a shell command
+ * This mimics Claude Code CLI's native "!" command feature
+ */
+export function parseDirectCommand(message: string): DirectCommandResult {
+    const trimmed = message.trim();
+
+    if (trimmed.startsWith('!')) {
+        const command = trimmed.substring(1).trim();
+        if (command.length > 0) {
+            return {
+                isDirectCommand: true,
+                command
+            };
+        }
+    }
+
+    return {
+        isDirectCommand: false
+    };
+}
+
+/**
  * Unified parser for special commands
  * Returns the type of command and original message if applicable
  */
@@ -112,6 +141,14 @@ export function parseSpecialCommand(message: string): SpecialCommandResult {
         return {
             type: 'happy-status',
             echoMessage: happyStatusResult.echoMessage
+        };
+    }
+
+    const directCommandResult = parseDirectCommand(message);
+    if (directCommandResult.isDirectCommand) {
+        return {
+            type: 'direct-command',
+            command: directCommandResult.command
         };
     }
 

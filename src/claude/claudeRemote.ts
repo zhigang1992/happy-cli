@@ -12,6 +12,10 @@ import { systemPrompt } from "./utils/systemPrompt";
 import { PermissionResult } from "./sdk/types";
 import { loadDirenvEnvironment } from "@/utils/direnv";
 import { ImageRefContent } from "@/api/types";
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
 
 /** Resolved image in Claude API format */
 export interface ResolvedImage {
@@ -196,6 +200,123 @@ export async function claudeRemote(opts: {
         }
         opts.onReady();
 
+        return;
+    }
+
+    // Handle !command for direct shell execution - bypasses AI completely
+    if (specialCommand.type === 'direct-command' && specialCommand.command) {
+        logger.debug(`[claudeRemote] Direct command detected: ${specialCommand.command}`);
+
+        // Generate a test session ID if not resuming
+        const directSessionId = startFrom || `direct-cmd-${Date.now()}`;
+        opts.onSessionFound(directSessionId);
+
+        // Send user message (echo of what was sent)
+        opts.onMessage({
+            type: 'user',
+            message: {
+                role: 'user',
+                content: initial.message
+            }
+        } as SDKUserMessage);
+
+        // Send system init message
+        opts.onMessage({
+            type: 'system',
+            subtype: 'init',
+            session_id: directSessionId,
+            cwd: opts.path,
+            model: 'direct-command',
+            tools: []
+        } as SDKSystemMessage);
+
+        // Execute the command directly
+        try {
+            const { stdout, stderr } = await execAsync(specialCommand.command, {
+                cwd: opts.path,
+                timeout: 30000, // 30 second timeout
+                env: process.env as Record<string, string>
+            });
+
+            // Format output similar to terminal
+            let output = '';
+            if (stdout) {
+                output += stdout;
+            }
+            if (stderr) {
+                output += stderr;
+            }
+
+            // Send assistant response with command output
+            opts.onMessage({
+                type: 'assistant',
+                message: {
+                    role: 'assistant',
+                    content: [{
+                        type: 'text',
+                        text: output || '(no output)'
+                    }]
+                }
+            } as SDKAssistantMessage);
+
+            // Send success result
+            opts.onMessage({
+                type: 'result',
+                subtype: 'success',
+                session_id: directSessionId,
+                num_turns: 0,
+                total_cost_usd: 0,
+                duration_ms: 0,
+                duration_api_ms: 0,
+                is_error: false
+            } as SDKResultMessage);
+
+            if (opts.onCompletionEvent) {
+                opts.onCompletionEvent('Command executed');
+            }
+        } catch (error: any) {
+            // Handle command errors
+            const execError = error as NodeJS.ErrnoException & {
+                stdout?: string;
+                stderr?: string;
+                code?: number | string;
+            };
+
+            let errorOutput = '';
+            if (execError.stdout) errorOutput += execError.stdout;
+            if (execError.stderr) errorOutput += execError.stderr;
+            if (!errorOutput) errorOutput = execError.message || 'Command failed';
+
+            // Send assistant response with error
+            opts.onMessage({
+                type: 'assistant',
+                message: {
+                    role: 'assistant',
+                    content: [{
+                        type: 'text',
+                        text: `Error: ${errorOutput}`
+                    }]
+                }
+            } as SDKAssistantMessage);
+
+            // Send error result
+            opts.onMessage({
+                type: 'result',
+                subtype: 'error_during_execution',
+                session_id: directSessionId,
+                num_turns: 0,
+                total_cost_usd: 0,
+                duration_ms: 0,
+                duration_api_ms: 0,
+                is_error: true
+            } as SDKResultMessage);
+
+            if (opts.onCompletionEvent) {
+                opts.onCompletionEvent('Command failed');
+            }
+        }
+
+        opts.onReady();
         return;
     }
 
