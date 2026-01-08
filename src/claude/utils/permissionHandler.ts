@@ -23,6 +23,8 @@ interface PermissionResponse {
     mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
     allowTools?: string[];
     receivedAt?: number;
+    /** Answers for AskUserQuestion tool - maps question header to answer string */
+    answers?: Record<string, string>;
 }
 
 
@@ -100,6 +102,17 @@ export class PermissionHandler {
             } else {
                 pending.resolve({ behavior: 'deny', message: response.reason || 'Plan rejected' });
             }
+        } else if (pending.toolName === 'AskUserQuestion') {
+            // Handle AskUserQuestion specially - merge answers into updatedInput
+            if (response.approved) {
+                const inputWithAnswers = {
+                    ...(pending.input as Record<string, unknown>),
+                    answers: response.answers || {}
+                };
+                pending.resolve({ behavior: 'allow', updatedInput: inputWithAnswers });
+            } else {
+                pending.resolve({ behavior: 'deny', message: response.reason || 'User declined to answer the questions.' });
+            }
         } else {
             // Handle default case for all other tools
             const result: PermissionResult = response.approved
@@ -141,12 +154,16 @@ export class PermissionHandler {
         // Handle special cases
         //
 
-        if (this.permissionMode === 'bypassPermissions') {
-            return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
-        }
+        // AskUserQuestion always needs user interaction to provide answers
+        // Don't auto-approve even in bypassPermissions mode
+        if (toolName !== 'AskUserQuestion') {
+            if (this.permissionMode === 'bypassPermissions') {
+                return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
+            }
 
-        if (this.permissionMode === 'acceptEdits' && descriptor.edit) {
-            return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
+            if (this.permissionMode === 'acceptEdits' && descriptor.edit) {
+                return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
+            }
         }
 
         //
