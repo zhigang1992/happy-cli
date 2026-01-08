@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const fs = require('fs');
 
 // Disable autoupdater (never works really)
@@ -13,34 +12,7 @@ function writeMessage(message) {
     }
 }
 
-// Intercept crypto.randomUUID
-const originalRandomUUID = crypto.randomUUID;
-Object.defineProperty(global, 'crypto', {
-    configurable: true,
-    enumerable: true,
-    get() {
-        return {
-            randomUUID: () => {
-                const uuid = originalRandomUUID();
-                writeMessage({ type: 'uuid', value: uuid });
-                return uuid;
-            }
-        };
-    }
-});
-Object.defineProperty(crypto, 'randomUUID', {
-    configurable: true,
-    enumerable: true,
-    get() {
-        return () => {
-            const uuid = originalRandomUUID();
-            writeMessage({ type: 'uuid', value: uuid });
-            return uuid;
-        }
-    }
-});
-
-// Intercept fetch to track activity
+// Intercept fetch to track thinking state
 const originalFetch = global.fetch;
 let fetchCounter = 0;
 
@@ -48,7 +20,7 @@ global.fetch = function(...args) {
     const id = ++fetchCounter;
     const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
     const method = args[1]?.method || 'GET';
-    
+
     // Parse URL for privacy
     let hostname = '';
     let path = '';
@@ -61,7 +33,7 @@ global.fetch = function(...args) {
         hostname = 'unknown';
         path = url;
     }
-    
+
     // Send fetch start event
     writeMessage({
         type: 'fetch-start',
@@ -74,7 +46,7 @@ global.fetch = function(...args) {
 
     // Execute the original fetch immediately
     const fetchPromise = originalFetch(...args);
-    
+
     // Attach handlers to send fetch end event
     const sendEnd = () => {
         writeMessage({
@@ -83,10 +55,10 @@ global.fetch = function(...args) {
             timestamp: Date.now()
         });
     };
-    
+
     // Send end event on both success and failure
     fetchPromise.then(sendEnd, sendEnd);
-    
+
     // Return the original promise unchanged
     return fetchPromise;
 };
@@ -95,4 +67,7 @@ global.fetch = function(...args) {
 Object.defineProperty(global.fetch, 'name', { value: 'fetch' });
 Object.defineProperty(global.fetch, 'length', { value: originalFetch.length });
 
-import('@anthropic-ai/claude-code/cli.js')
+// Import global Claude Code CLI
+const { getClaudeCliPath, runClaudeCli } = require('./claude_version_utils.cjs');
+
+runClaudeCli(getClaudeCliPath());
