@@ -14,6 +14,7 @@ import { hashObject } from '@/utils/deterministicJson';
 import { startCaffeinate, stopCaffeinate } from '@/utils/caffeinate';
 import { extractSDKMetadataAsync } from '@/claude/sdk/metadataExtractor';
 import { parseSpecialCommand } from '@/parsers/specialCommands';
+import { discoverCustomCommands, commandsToMetadata } from '@/claude/customCommands';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { configuration } from '@/configuration';
 import { notifyDaemonSessionStarted } from '@/daemon/controlClient';
@@ -147,6 +148,24 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         }
     } catch (error) {
         logger.debug('[START] Failed to report to daemon (may not be running):', error);
+    }
+
+    // Discover custom commands from project and personal directories
+    const customCommands = discoverCustomCommands(workingDirectory);
+    const customCommandsMetadata = commandsToMetadata(customCommands);
+    logger.debug(`[start] Discovered ${customCommands.length} custom commands`);
+
+    // Update session with custom commands immediately
+    if (customCommandsMetadata.length > 0) {
+        try {
+            api.sessionSyncClient(response).updateMetadata((currentMetadata) => ({
+                ...currentMetadata,
+                customCommands: customCommandsMetadata
+            }));
+            logger.debug('[start] Session metadata updated with custom commands');
+        } catch (error) {
+            logger.debug('[start] Failed to update session metadata with custom commands:', error);
+        }
     }
 
     // Extract SDK metadata in background and update session when ready
