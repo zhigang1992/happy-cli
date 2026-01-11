@@ -330,7 +330,7 @@ function getClaudeCliPath() {
 
     const version = getVersion(result.path);
     const versionStr = version ? ` v${version}` : '';
-    console.error(`\x1b[90mUsing Claude Code${versionStr} from ${result.source}\x1b[0m`);
+    console.error(`Using Claude Code${versionStr} from ${result.source}`);
 
     return result.path;
 }
