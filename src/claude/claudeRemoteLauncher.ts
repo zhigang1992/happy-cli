@@ -73,6 +73,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     let exitReason: 'switch' | 'exit' | null = null;
     let abortController: AbortController | null = null;
     let abortFuture: Future<void> | null = null;
+    let abortRequested = false; // Track if abort was requested (vs normal exit)
 
     async function abort() {
         if (abortController && !abortController.signal.aborted) {
@@ -83,6 +84,8 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
 
     async function doAbort() {
         logger.debug('[remote]: doAbort');
+        // Track that abort was requested so we can handle it properly in the error handler
+        abortRequested = true;
         await abort();
     }
 
@@ -334,6 +337,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     path: session.path,
                     allowedTools: session.allowedTools ?? [],
                     mcpServers: session.mcpServers,
+                    hookSettingsPath: session.hookSettingsPath,
                     canCallTool: permissionHandler.handleToolCall,
                     isAborted: (toolCallId: string) => {
                         return permissionHandler.isAborted(toolCallId);
@@ -432,7 +436,15 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                 
                 // Consume one-time Claude flags after spawn
                 session.consumeOneTimeFlags();
-                
+
+                // Check if this was a clean abort (user clicked abort button)
+                if (abortRequested && abortController.signal.aborted) {
+                    logger.debug('[remote]: Operation aborted by user, continuing remote mode');
+                    session.client.sendSessionEvent({ type: 'message', message: 'Aborted' });
+                    abortRequested = false; // Reset the flag
+                    continue; // Continue the loop to wait for next message
+                }
+
                 if (!exitReason && abortController.signal.aborted) {
                     session.client.sendSessionEvent({ type: 'message', message: 'Aborted by user' });
                 }
@@ -440,11 +452,21 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                 const errorMessage = e instanceof Error ? e.message : String(e);
                 logger.debug('[remote]: launch error', e);
 
+                // Check if abort was requested (this is the normal flow when user clicks abort)
+                if (abortRequested) {
+                    logger.debug('[remote]: Aborting after error, continuing remote mode');
+                    session.client.sendSessionEvent({ type: 'message', message: 'Aborted' });
+                    abortRequested = false; // Reset the flag
+                    continue;
+                }
+
                 // Always send error details to the app
                 if (exitReason === 'switch') {
                     session.client.sendSessionEvent({ type: 'message', message: `Error during mode switch: ${errorMessage}` });
+                    break;
                 } else if (exitReason === 'exit') {
                     session.client.sendSessionEvent({ type: 'message', message: `Error during exit: ${errorMessage}` });
+                    break;
                 } else {
                     session.client.sendSessionEvent({ type: 'message', message: `Process error: ${errorMessage}` });
                     continue;

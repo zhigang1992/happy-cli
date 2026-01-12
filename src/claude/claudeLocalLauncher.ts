@@ -28,27 +28,33 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
 
     // Handle abort
     let exitReason: 'switch' | 'exit' | null = null;
-    const processAbortController = new AbortController();
+    let abortRequested = false; // Track if abort was requested (vs normal exit)
+    let processAbortController = new AbortController();
     let exutFuture = new Future<void>();
     try {
-        async function abort() {
+        // Wrapper functions that capture current controller/future via closure
+        function getAbortController() { return processAbortController; }
+        function getExitFuture() { return exutFuture; }
 
-            // Send abort signal
-            if (!processAbortController.signal.aborted) {
-                processAbortController.abort();
+        async function abort() {
+            // Send abort signal using current controller
+            const controller = getAbortController();
+            const exitFuture = getExitFuture();
+
+            if (!controller.signal.aborted) {
+                controller.abort();
             }
 
             // Await full exit
-            await exutFuture.promise;
+            await exitFuture.promise;
         }
 
         async function doAbort() {
             logger.debug('[local]: doAbort');
 
-            // Switching to remote mode
-            if (!exitReason) {
-                exitReason = 'switch';
-            }
+            // Abort current operation without switching modes
+            // This allows the user to abort the current command and continue in local mode
+            abortRequested = true;
 
             // Reset sent messages
             session.queue.reset();
@@ -70,7 +76,7 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
         }
 
         // When to abort
-        session.client.rpcHandlerManager.registerHandler('abort', doAbort); // Abort current process, clean queue and switch to remote mode
+        session.client.rpcHandlerManager.registerHandler('abort', doAbort); // Abort current process without switching modes
         session.client.rpcHandlerManager.registerHandler('switch', doSwitch); // When user wants to switch to remote mode
         session.queue.setOnMessage((message: string, mode) => {
             // Switch to remote mode when message received
@@ -115,6 +121,17 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
                 // For example we don't want to pass --resume flag after first spawn
                 session.consumeOneTimeFlags();
 
+                // Check if abort was requested (via RPC) vs normal exit
+                // If abort was requested, continue the loop instead of exiting
+                if (abortRequested) {
+                    logger.debug('[local]: Aborting current operation, continuing local mode');
+                    abortRequested = false; // Reset the flag
+                    // Create a new AbortController for the next iteration
+                    processAbortController = new AbortController();
+                    exutFuture = new Future<void>();
+                    continue; // Continue the loop to restart Claude
+                }
+
                 // Normal exit
                 if (!exitReason) {
                     exitReason = 'exit';
@@ -123,6 +140,16 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
             } catch (e) {
                 const errorMessage = e instanceof Error ? e.message : String(e);
                 logger.debug('[local]: launch error', e);
+
+                // Check if abort was requested during the operation
+                if (abortRequested) {
+                    logger.debug('[local]: Aborting after error, continuing local mode');
+                    abortRequested = false;
+                    // Create a new AbortController for the next iteration
+                    processAbortController = new AbortController();
+                    exutFuture = new Future<void>();
+                    continue;
+                }
 
                 // Always send error details to the app
                 // Note: exitReason can be set by async callbacks (doAbort/doSwitch) during the await

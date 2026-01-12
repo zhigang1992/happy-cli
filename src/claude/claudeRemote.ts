@@ -14,6 +14,7 @@ import { loadDirenvEnvironment } from "@/utils/direnv";
 import { ImageRefContent } from "@/api/types";
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { randomUUID } from 'node:crypto';
 
 const execAsync = promisify(exec);
 
@@ -36,6 +37,7 @@ export async function claudeRemote(opts: {
     claudeEnvVars?: Record<string, string>,
     claudeArgs?: string[],
     allowedTools: string[],
+    hookSettingsPath?: string,
     signal?: AbortSignal,
     canCallTool: (toolName: string, input: unknown, mode: EnhancedMode, options: { signal: AbortSignal }) => Promise<PermissionResult>,
 
@@ -339,6 +341,7 @@ export async function claudeRemote(opts: {
         pathToClaudeCodeExecutable: (() => {
             return resolve(join(projectPath(), 'scripts', 'claude_remote_launcher.cjs'));
         })(),
+        settingsPath: opts.hookSettingsPath,
         onStderr: opts.onStderr,
     }
 
@@ -392,6 +395,7 @@ export async function claudeRemote(opts: {
     const initialContent = await buildMessageContent(initial.message, initial.mode.imageRefs);
     messages.push({
         type: 'user',
+        uuid: randomUUID(),  // UUID is required for Claude CLI streaming mode
         message: {
             role: 'user',
             content: initialContent,
@@ -457,7 +461,11 @@ export async function claudeRemote(opts: {
                 }
                 mode = next.mode;
                 const nextContent = await buildMessageContent(next.message, next.mode.imageRefs);
-                messages.push({ type: 'user', message: { role: 'user', content: nextContent } });
+                messages.push({
+                    type: 'user',
+                    uuid: randomUUID(),  // UUID is required for Claude CLI streaming mode
+                    message: { role: 'user', content: nextContent }
+                });
             }
 
             // Handle tool result

@@ -15,6 +15,7 @@ export interface SDKMessage {
 
 export interface SDKUserMessage extends SDKMessage {
     type: 'user'
+    uuid?: string  // UUID is required for Claude CLI streaming mode
     parent_tool_use_id?: string
     message: {
         role: 'user'
@@ -173,6 +174,8 @@ export interface QueryOptions {
     fallbackModel?: string
     strictMcpConfig?: boolean
     canCallTool?: CanCallToolCallback
+    /** Path to a settings JSON file to pass to Claude via --settings */
+    settingsPath?: string
     onStderr?: (data: string) => void
 }
 

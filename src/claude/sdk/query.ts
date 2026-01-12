@@ -274,6 +274,7 @@ export function query(config: {
             fallbackModel,
             strictMcpConfig,
             canCallTool,
+            settingsPath,
             onStderr
         } = {}
     } = config
@@ -305,6 +306,7 @@ export function query(config: {
     }
     if (strictMcpConfig) args.push('--strict-mcp-config')
     if (permissionMode) args.push('--permission-mode', permissionMode)
+    if (settingsPath) args.push('--settings', settingsPath)
 
     if (fallbackModel) {
         if (model && fallbackModel === model) {
