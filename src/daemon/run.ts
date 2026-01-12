@@ -260,11 +260,11 @@ export async function startDaemon(): Promise<void> {
         const args = [
           options.agent === 'claude' ? 'claude' : 'codex',
           '--happy-starting-mode', 'remote',
-          '--started-by', 'daemon'
+          '--started-by', 'daemon',
+          // Add --resume flag if resuming from a previous Claude session
+          ...(options.resumeClaudeSessionId ? ['--resume', options.resumeClaudeSessionId] : [])
         ];
 
-        // TODO: In future, sessionId could be used with --resume to continue existing sessions
-        // For now, we ignore it - each spawn creates a new session
         const happyProcess = spawnHappyCLI(args, {
           cwd: directory,
           detached: true,  // Sessions stay alive when daemon stops
