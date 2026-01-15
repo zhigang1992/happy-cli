@@ -1,2 +1,3 @@
-export const PLAN_FAKE_REJECT = `User approved plan, but you need to be restarted. STOP IMMEDIATELY TO SWITCH FROM PLAN MODE. DO NOT REPLY TO THIS MESSAGE.`
-export const PLAN_FAKE_RESTART = `PlEaZe Continue with plan.`
+// This file previously contained plan mode hack constants that are no longer needed.
+// ExitPlanMode now works like other permission-based tools (AskUserQuestion, etc.)
+// and doesn't require session restarts or fake rejection messages.

@@ -8,7 +8,6 @@
 import { logger } from "@/lib";
 import { SDKAssistantMessage, SDKMessage, SDKUserMessage } from "../sdk";
 import { PermissionResult } from "../sdk/types";
-import { PLAN_FAKE_REJECT, PLAN_FAKE_RESTART } from "../sdk/prompts";
 import { Session } from "../session";
 import { deepEqual } from "@/utils/deepEqual";
 import { getToolName } from "./getToolName";
@@ -86,21 +85,15 @@ export class PermissionHandler {
             this.permissionMode = response.mode;
         }
 
-        // Handle 
+        // Handle ExitPlanMode - treat like a normal permission request
+        // When approved, the tool returns success and Claude continues with the plan
         if (pending.toolName === 'exit_plan_mode' || pending.toolName === 'ExitPlanMode') {
-            // Handle exit_plan_mode specially
             logger.debug('Plan mode result received', response);
             if (response.approved) {
-                logger.debug('Plan approved - injecting PLAN_FAKE_RESTART');
-                // Inject the approval message at the beginning of the queue
-                if (response.mode && ['default', 'acceptEdits', 'bypassPermissions'].includes(response.mode)) {
-                    this.session.queue.unshift(PLAN_FAKE_RESTART, { permissionMode: response.mode });
-                } else {
-                    this.session.queue.unshift(PLAN_FAKE_RESTART, { permissionMode: 'default' });
-                }
-                pending.resolve({ behavior: 'deny', message: PLAN_FAKE_REJECT });
+                logger.debug('Plan approved - continuing normally');
+                pending.resolve({ behavior: 'allow', updatedInput: (pending.input as Record<string, unknown>) || {} });
             } else {
-                pending.resolve({ behavior: 'deny', message: response.reason || 'Plan rejected' });
+                pending.resolve({ behavior: 'deny', message: response.reason || 'Plan rejected by user. Ask the user what changes they would like to make to the plan.' });
             }
         } else if (pending.toolName === 'AskUserQuestion') {
             // Handle AskUserQuestion specially - merge answers into updatedInput
@@ -154,9 +147,14 @@ export class PermissionHandler {
         // Handle special cases
         //
 
-        // AskUserQuestion always needs user interaction to provide answers
+        // AskUserQuestion and ExitPlanMode always need user interaction
         // Don't auto-approve even in bypassPermissions mode
-        if (toolName !== 'AskUserQuestion') {
+        const requiresUserInteraction =
+            toolName === 'AskUserQuestion' ||
+            toolName === 'ExitPlanMode' ||
+            toolName === 'exit_plan_mode';
+
+        if (!requiresUserInteraction) {
             if (this.permissionMode === 'bypassPermissions') {
                 return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
             }
@@ -334,15 +332,8 @@ export class PermissionHandler {
      * Checks if a tool call is rejected
      */
     isAborted(toolCallId: string): boolean {
-
         // If tool not approved, it's aborted
         if (this.responses.get(toolCallId)?.approved === false) {
-            return true;
-        }
-
-        // Always abort exit_plan_mode
-        const toolCall = this.toolCalls.find(tc => tc.id === toolCallId);
-        if (toolCall && (toolCall.name === 'exit_plan_mode' || toolCall.name === 'ExitPlanMode')) {
             return true;
         }
 
