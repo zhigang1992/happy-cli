@@ -123,6 +123,8 @@ export interface SpawnSessionOptions {
     agent?: 'claude' | 'codex';
     token?: string;
     resumeClaudeSessionId?: string;
+    /** Environment variables to pass to the spawned session */
+    environmentVariables?: Record<string, string>;
 }
 
 export type SpawnSessionResult =

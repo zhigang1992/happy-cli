@@ -235,7 +235,7 @@ export async function startDaemon(): Promise<void> {
       try {
 
         // Resolve authentication token if provided
-        let extraEnv: Record<string, string> = {};
+        let authEnv: Record<string, string> = {};
         if (options.token) {
           if (options.agent === 'codex') {
 
@@ -246,14 +246,22 @@ export async function startDaemon(): Promise<void> {
             fs.writeFile(join(codexHomeDir.name, 'auth.json'), options.token);
 
             // Set the environment variable for Codex
-            extraEnv = {
+            authEnv = {
               CODEX_HOME: codexHomeDir.name
             };
           } else { // Assuming claude
-            extraEnv = {
+            authEnv = {
               CLAUDE_CODE_OAUTH_TOKEN: options.token
             };
           }
+        }
+
+        // Merge environment variables: process.env < user-provided env < auth tokens
+        // User-provided env vars come from the app's environment picker
+        // Auth tokens take highest precedence to ensure they're never overridden
+        const userEnv = options.environmentVariables || {};
+        if (Object.keys(userEnv).length > 0) {
+          logger.debug(`[DAEMON RUN] Using custom environment variables: ${Object.keys(userEnv).join(', ')}`);
         }
 
         // Construct arguments for the CLI
@@ -271,7 +279,8 @@ export async function startDaemon(): Promise<void> {
           stdio: ['ignore', 'pipe', 'pipe'],  // Capture stdout/stderr for debugging
           env: {
             ...process.env,
-            ...extraEnv
+            ...userEnv,    // User-provided env vars override process.env
+            ...authEnv     // Auth tokens have highest priority (never overridden)
           }
         });
 
