@@ -7,7 +7,7 @@
 ## Fork Changes
 
 - Renamed package to `@zhigang1992/happy-cli` for personal npm publishing
-- Changed default server URLs to `happy-server.reily.app` and `happy.reily.app`
+- Changed default server URLs to `happy-server.innopals.com` and `happy.innopals.com`
 - Switched from yarn to bun
 - Lazy download of tools to reduce package size (~110MB to ~186KB)
 - Added image attachment support in messages
@@ -59,8 +59,8 @@ This will:
 
 ## Environment Variables
 
-- `HAPPY_SERVER_URL` - Custom server URL (default: https://happy-server.reily.app)
-- `HAPPY_WEBAPP_URL` - Custom web app URL (default: https://happy.reily.app)
+- `HAPPY_SERVER_URL` - Custom server URL (default: https://happy-server.innopals.com)
+- `HAPPY_WEBAPP_URL` - Custom web app URL (default: https://happy.innopals.com)
 - `HAPPY_HOME_DIR` - Custom home directory for Happy data (default: ~/.happy)
 - `HAPPY_DISABLE_CAFFEINATE` - Disable macOS sleep prevention (set to `true`, `1`, or `yes`)
 - `HAPPY_EXPERIMENTAL` - Enable experimental features (set to `true`, `1`, or `yes`)
