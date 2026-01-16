@@ -408,6 +408,59 @@ export async function claudeRemote(opts: {
         options: sdkOptions,
     });
 
+    // Track if we're waiting for the next user message
+    // This is used to signal when we're ready for new messages
+    let waitingForNextMessage = false;
+    let messagePusherStopped = false;
+
+    // Start a background task to push user messages to SDK
+    // This runs independently of the SDK message receiving loop to avoid blocking
+    // when task notifications arrive (e.g., background task completions)
+    const messagePusherTask = (async () => {
+        try {
+            while (!messagePusherStopped) {
+                // Wait until we're ready for the next message
+                if (!waitingForNextMessage) {
+                    await new Promise<void>(resolve => {
+                        const checkInterval = setInterval(() => {
+                            if (waitingForNextMessage || messagePusherStopped) {
+                                clearInterval(checkInterval);
+                                resolve();
+                            }
+                        }, 10);
+                    });
+                }
+
+                if (messagePusherStopped) {
+                    break;
+                }
+
+                logger.debug('[claudeRemote] Message pusher waiting for next message');
+                const next = await opts.nextMessage();
+
+                if (!next) {
+                    logger.debug('[claudeRemote] No more messages, ending message stream');
+                    messages.end();
+                    break;
+                }
+
+                logger.debug('[claudeRemote] Message pusher received new message, pushing to SDK');
+                mode = next.mode;
+                const nextContent = await buildMessageContent(next.message, next.mode.imageRefs);
+                messages.push({
+                    type: 'user',
+                    uuid: randomUUID(),
+                    message: { role: 'user', content: nextContent }
+                });
+
+                // Reset flag - we'll set it again when we receive a result
+                waitingForNextMessage = false;
+            }
+        } catch (e) {
+            logger.debug('[claudeRemote] Message pusher error:', e);
+        }
+    })();
+
     updateThinking(true);
     try {
         logger.debug(`[claudeRemote] Starting to iterate over response`);
@@ -439,7 +492,7 @@ export async function claudeRemote(opts: {
             // Handle result messages
             if (message.type === 'result') {
                 updateThinking(false);
-                logger.debug('[claudeRemote] Result received, exiting claudeRemote');
+                logger.debug('[claudeRemote] Result received');
 
                 // Send completion messages
                 if (isCompactCommand) {
@@ -450,22 +503,12 @@ export async function claudeRemote(opts: {
                     isCompactCommand = false;
                 }
 
-                // Send ready event
+                // Send ready event and signal that we're ready for the next message
+                // The message pusher task will handle waiting for and pushing the next message
+                // This allows the for-await loop to continue receiving SDK messages
+                // (e.g., from task notifications) without blocking
                 opts.onReady();
-
-                // Push next message
-                const next = await opts.nextMessage();
-                if (!next) {
-                    messages.end();
-                    return;
-                }
-                mode = next.mode;
-                const nextContent = await buildMessageContent(next.message, next.mode.imageRefs);
-                messages.push({
-                    type: 'user',
-                    uuid: randomUUID(),  // UUID is required for Claude CLI streaming mode
-                    message: { role: 'user', content: nextContent }
-                });
+                waitingForNextMessage = true;
             }
 
             // Handle tool result
@@ -475,6 +518,7 @@ export async function claudeRemote(opts: {
                     for (let c of msg.message.content) {
                         if (c.type === 'tool_result' && c.tool_use_id && opts.isAborted(c.tool_use_id)) {
                             logger.debug('[claudeRemote] Tool aborted, exiting claudeRemote');
+                            messagePusherStopped = true;
                             return;
                         }
                     }
@@ -490,5 +534,11 @@ export async function claudeRemote(opts: {
         }
     } finally {
         updateThinking(false);
+        messagePusherStopped = true;
+        // Wait for message pusher to stop (with timeout)
+        await Promise.race([
+            messagePusherTask,
+            new Promise(resolve => setTimeout(resolve, 100))
+        ]);
     }
 }
