@@ -6,7 +6,7 @@ import React from "react";
 import { claudeRemote } from "./claudeRemote";
 import { PermissionHandler } from "./utils/permissionHandler";
 import { Future } from "@/utils/future";
-import { SDKAssistantMessage, SDKMessage, SDKUserMessage } from "./sdk";
+import { SDKAssistantMessage, SDKMessage, SDKUserMessage, Query } from "./sdk";
 import { formatClaudeMessageForInk } from "@/ui/messageFormatterInk";
 import { logger } from "@/ui/logger";
 import { SDKToLogConverter } from "./utils/sdkToLogConverter";
@@ -74,6 +74,10 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     let abortFuture: Future<void> | null = null;
     let abortRequested = false; // Track if abort was requested (vs normal exit)
 
+    // Track current query for interrupt support
+    let currentQuery: Query | null = null;
+    let isSessionIdle: (() => boolean) | null = null;
+
     async function abort() {
         if (abortController && !abortController.signal.aborted) {
             abortController.abort();
@@ -83,6 +87,25 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
 
     async function doAbort() {
         logger.debug('[remote]: doAbort');
+
+        // Check if session is busy (not idle) - if so, try to interrupt first
+        const idle = isSessionIdle?.() ?? true;
+        if (!idle && currentQuery) {
+            logger.debug('[remote]: Session is busy, attempting interrupt first');
+            try {
+                await currentQuery.interrupt();
+                logger.debug('[remote]: Interrupt sent successfully');
+                // Don't set abortRequested - let the session continue after interrupt
+                // The tool will receive an interrupted result and Claude will continue
+                return;
+            } catch (e) {
+                logger.debug('[remote]: Interrupt failed, falling back to full abort', e);
+                // Fall through to full abort
+            }
+        }
+
+        // Session is idle or interrupt failed - do full abort
+        logger.debug('[remote]: Session is idle or interrupt failed, performing full abort');
         // Track that abort was requested so we can handle it properly in the error handler
         abortRequested = true;
         await abort();
@@ -385,6 +408,12 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                         }
                     },
                     signal: abortController.signal,
+                    onQueryCreated: (query, isIdle) => {
+                        // Store reference to query for interrupt support
+                        currentQuery = query;
+                        isSessionIdle = isIdle;
+                        logger.debug('[remote]: Query created, interrupt support enabled');
+                    },
                 });
                 
                 // Consume one-time Claude flags after spawn
@@ -448,6 +477,9 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                 abortController = null;
                 abortFuture?.resolve(undefined);
                 abortFuture = null;
+                // Clear query reference
+                currentQuery = null;
+                isSessionIdle = null;
                 logger.debug('[remote]: launch done');
                 permissionHandler.reset();
                 modeHash = null;

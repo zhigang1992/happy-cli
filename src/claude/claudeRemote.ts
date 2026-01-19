@@ -1,5 +1,5 @@
 import { EnhancedMode, PermissionMode } from "./loop";
-import { query, type QueryOptions as Options, type SDKMessage, type SDKSystemMessage, type SDKAssistantMessage, type SDKResultMessage, AbortError, SDKUserMessage } from '@/claude/sdk'
+import { query, Query, type QueryOptions as Options, type SDKMessage, type SDKSystemMessage, type SDKAssistantMessage, type SDKResultMessage, AbortError, SDKUserMessage } from '@/claude/sdk'
 import { claudeCheckSession } from "./utils/claudeCheckSession";
 import { join, resolve } from 'node:path';
 import { projectPath } from "@/projectPath";
@@ -55,7 +55,9 @@ export async function claudeRemote(opts: {
     onMessage: (message: SDKMessage) => void,
     onCompletionEvent?: (message: string) => void,
     onSessionReset?: () => void,
-    onStderr?: (data: string) => void
+    onStderr?: (data: string) => void,
+    /** Called when Query object is created, allows caller to call interrupt() */
+    onQueryCreated?: (query: Query, isIdle: () => boolean) => void
 }) {
 
     // Check if session is valid
@@ -410,8 +412,14 @@ export async function claudeRemote(opts: {
 
     // Track if we're waiting for the next user message
     // This is used to signal when we're ready for new messages
+    // Also used by interrupt logic - when true, session is idle (no active work)
     let waitingForNextMessage = false;
     let messagePusherStopped = false;
+
+    // Notify caller about the query object so they can call interrupt()
+    if (opts.onQueryCreated) {
+        opts.onQueryCreated(response, () => waitingForNextMessage);
+    }
 
     // Start a background task to push user messages to SDK
     // This runs independently of the SDK message receiving loop to avoid blocking
