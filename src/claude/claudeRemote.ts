@@ -65,11 +65,16 @@ export async function claudeRemote(opts: {
     if (opts.sessionId && !claudeCheckSession(opts.sessionId, opts.path)) {
         startFrom = null;
     }
-    
-    // Extract --resume from claudeArgs if present (for first spawn)
-    if (!startFrom && opts.claudeArgs) {
+
+    // Extract --resume and --fork-session from claudeArgs if present (for first spawn)
+    let forkSession = false;
+    if (opts.claudeArgs) {
         for (let i = 0; i < opts.claudeArgs.length; i++) {
-            if (opts.claudeArgs[i] === '--resume') {
+            if (opts.claudeArgs[i] === '--fork-session') {
+                forkSession = true;
+                logger.debug('[claudeRemote] Found --fork-session flag');
+            }
+            if (!startFrom && opts.claudeArgs[i] === '--resume') {
                 // Check if next arg exists and looks like a session ID
                 if (i + 1 < opts.claudeArgs.length) {
                     const nextArg = opts.claudeArgs[i + 1];
@@ -77,16 +82,13 @@ export async function claudeRemote(opts: {
                     if (!nextArg.startsWith('-') && nextArg.includes('-')) {
                         startFrom = nextArg;
                         logger.debug(`[claudeRemote] Found --resume with session ID: ${startFrom}`);
-                        break;
                     } else {
                         // Just --resume without UUID - SDK doesn't support this
                         logger.debug('[claudeRemote] Found --resume without session ID - not supported in remote mode');
-                        break;
                     }
                 } else {
                     // --resume at end of args - SDK doesn't support this
                     logger.debug('[claudeRemote] Found --resume without session ID - not supported in remote mode');
-                    break;
                 }
             }
         }
@@ -329,6 +331,7 @@ export async function claudeRemote(opts: {
     const sdkOptions: Options = {
         cwd: opts.path,
         resume: startFrom ?? undefined,
+        forkSession,
         mcpServers: opts.mcpServers,
         permissionMode: initial.mode.permissionMode === 'plan' ? 'plan' : 'default',
         model: initial.mode.model,

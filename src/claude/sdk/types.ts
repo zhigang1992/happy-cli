@@ -170,6 +170,8 @@ export interface QueryOptions {
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
     continue?: boolean
     resume?: string
+    /** When resuming, create a new session ID instead of reusing the original */
+    forkSession?: boolean
     model?: string
     fallbackModel?: string
     strictMcpConfig?: boolean

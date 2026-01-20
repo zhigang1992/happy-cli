@@ -299,6 +299,7 @@ export function query(config: {
     }
     if (continueConversation) args.push('--continue')
     if (resume) args.push('--resume', resume)
+    if (config.options?.forkSession) args.push('--fork-session')
     if (allowedTools.length > 0) args.push('--allowedTools', allowedTools.join(','))
     if (disallowedTools.length > 0) args.push('--disallowedTools', disallowedTools.join(','))
     if (mcpServers && Object.keys(mcpServers).length > 0) {
