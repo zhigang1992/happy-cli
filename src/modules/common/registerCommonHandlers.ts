@@ -123,6 +123,8 @@ export interface SpawnSessionOptions {
     agent?: 'claude' | 'codex';
     token?: string;
     resumeClaudeSessionId?: string;
+    /** When resuming, create a new session ID instead of reusing the original */
+    forkSession?: boolean;
     /** Environment variables to pass to the spawned session */
     environmentVariables?: Record<string, string>;
 }

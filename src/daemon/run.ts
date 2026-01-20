@@ -270,7 +270,9 @@ export async function startDaemon(): Promise<void> {
           '--happy-starting-mode', 'remote',
           '--started-by', 'daemon',
           // Add --resume flag if resuming from a previous Claude session
-          ...(options.resumeClaudeSessionId ? ['--resume', options.resumeClaudeSessionId] : [])
+          ...(options.resumeClaudeSessionId ? ['--resume', options.resumeClaudeSessionId] : []),
+          // Add --fork-session flag to create a new session ID when resuming
+          ...(options.forkSession ? ['--fork-session'] : [])
         ];
 
         const happyProcess = spawnHappyCLI(args, {
