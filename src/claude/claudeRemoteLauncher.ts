@@ -17,6 +17,7 @@ import { getToolName } from "./utils/getToolName";
 import { ImageRefContent } from "@/api/types";
 import { basename } from "path";
 import * as os from 'os';
+import { createSessionScanner, type SessionScanner } from "./utils/sessionScanner";
 
 interface PermissionsField {
     date: number;
@@ -147,6 +148,49 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     }, permissionHandler.getResponses());
 
 
+    // Track sent message uuids for deduplication with session scanner
+    const sentMessageUuids = new Set<string>();
+
+    // Helper to get dedup key from RawJSONLines (content-based, not uuid-based)
+    // UUID can't be used because converter generates new uuids while session file has different ones
+    function getMessageDedupeKey(msg: RawJSONLines): string | null {
+        if (msg.type === 'summary') {
+            return `summary:${msg.leafUuid}:${msg.summary}`;
+        }
+        if (msg.type === 'system') {
+            return `system:${msg.uuid}`;
+        }
+        // For user/assistant messages, use type + content hash
+        try {
+            const content = JSON.stringify(msg.message?.content ?? '');
+            // Simple hash: first 100 chars of content + length
+            const contentKey = content.slice(0, 100) + ':' + content.length;
+            return `${msg.type}:${contentKey}`;
+        } catch {
+            return msg.uuid ?? null;
+        }
+    }
+
+    // Session scanner for catching injected messages (created once, persists across sessions)
+    const sessionScanner = await createSessionScanner({
+        sessionId: session.sessionId,
+        workingDirectory: session.path,
+        onMessage: (logMessage: RawJSONLines) => {
+            const dedupeKey = getMessageDedupeKey(logMessage);
+            // Dedupe: skip if already sent via SDK stdout
+            if (dedupeKey && sentMessageUuids.has(dedupeKey)) {
+                logger.debug(`[remote]: Scanner skipping (already sent): ${logMessage.type}`);
+                return;
+            }
+            // Mark as sent and forward to mobile
+            if (dedupeKey) {
+                sentMessageUuids.add(dedupeKey);
+            }
+            logger.debug(`[remote]: Scanner forwarding message: ${logMessage.type}`);
+            messageQueue.enqueue(logMessage);
+        }
+    });
+
     // Handle messages
     let ongoingToolCalls = new Map<string, { parentToolCallId: string | null }>();
 
@@ -187,6 +231,12 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         // Convert SDK message to log format and send to client
         const logMessage = sdkToLogConverter.convert(message);
         if (logMessage) {
+            // Track uuid IMMEDIATELY for deduplication (before any enqueue)
+            const dedupeKey = getMessageDedupeKey(logMessage);
+            if (dedupeKey) {
+                sentMessageUuids.add(dedupeKey);
+            }
+
             // Add permissions field to tool result content
             if (logMessage.type === 'user' && logMessage.message?.content) {
                 const content = Array.isArray(logMessage.message.content)
@@ -253,6 +303,19 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                 }
             }
 
+            // Skip user messages that are just text input (not tool_result)
+            // These are echoed back by SDK stdout but scanner will send them from session file
+            // Only keep user messages that contain tool_result (they need permissions attached)
+            if (logMessage.type === 'user') {
+                const content = logMessage.message?.content;
+                const hasToolResult = Array.isArray(content) &&
+                    content.some((c: any) => c.type === 'tool_result');
+                if (!hasToolResult) {
+                    logger.debug('[remote]: Skipping user text message (scanner will handle)');
+                    return; // Skip - scanner will send from session file
+                }
+            }
+
             // Queue all other messages immediately (no delay)
             messageQueue.enqueue(logMessage);
         }
@@ -265,6 +328,11 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     if (c.type === 'tool_use' && c.name === 'Task' && c.input && typeof (c.input as any).prompt === 'string') {
                         const logMessage2 = sdkToLogConverter.convertSidechainUserMessage(c.id!, (c.input as any).prompt);
                         if (logMessage2) {
+                            // Track uuid for deduplication (sidechain messages)
+                            const dedupeKey2 = getMessageDedupeKey(logMessage2);
+                            if (dedupeKey2) {
+                                sentMessageUuids.add(dedupeKey2);
+                            }
                             messageQueue.enqueue(logMessage2);
                         }
                     }
@@ -373,6 +441,9 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                         // Update converter's session ID when new session is found
                         sdkToLogConverter.updateSessionId(sessionId);
                         session.onSessionFound(sessionId);
+
+                        // Notify session scanner of new session (scanner already created above)
+                        sessionScanner.onNewSession(sessionId);
                     },
                     onThinkingChange: session.onThinkingChange,
                     claudeEnvVars: session.claudeEnvVars,
@@ -487,6 +558,9 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
             }
         }
     } finally {
+
+        // Clean up session scanner
+        await sessionScanner.cleanup();
 
         // Clean up permission handler
         permissionHandler.reset();
