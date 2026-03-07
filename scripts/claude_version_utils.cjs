@@ -258,6 +258,10 @@ function findLatestVersionBinary(versionsDir, binaryName = null) {
  * @returns {{path: string, source: string}|null} Path and source, or null if not found
  */
 function findGlobalClaudeCliPath() {
+    const envPath = process.env.HAPPY_CLAUDE_PATH;
+    if (envPath && fs.existsSync(envPath)) {
+        return { path: envPath, source: 'HAPPY_CLAUDE_PATH env' };
+    }
     // Check npm global first (highest priority)
     const npmPath = findNpmGlobalCliPath();
     if (npmPath) return { path: npmPath, source: 'npm' };
